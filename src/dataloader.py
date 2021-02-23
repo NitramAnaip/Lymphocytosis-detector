@@ -16,6 +16,7 @@ class LymphocytosisDataset(Dataset):
         train: bool = True,
         transform: callable = None,
         fill_img_list: bool = False,
+        split_label: bool = False,
     ) -> None:
         """
         Loads Lymphocytosis data
@@ -42,9 +43,6 @@ class LymphocytosisDataset(Dataset):
         )
         ## Reindex the annotation to the "ID" column
         self.annotation_frame = self.annotation_frame.set_index("ID")
-        ## Split annotations and labels
-        self.labels = self.annotation_frame["LABEL"]
-        self.annotation_frame = self.annotation_frame.drop(columns=["LABEL"])
         ## Handle "DOB" column
         DOB = self.annotation_frame["DOB"].copy()
         line_with_slash = DOB.str.contains("/")
@@ -57,6 +55,7 @@ class LymphocytosisDataset(Dataset):
         self.train = train
         self.transform = transform
         self.fill_img_list = fill_img_list
+        self.split_label = split_label
 
     def __len__(self) -> int:
         if self.train:
@@ -80,4 +79,8 @@ class LymphocytosisDataset(Dataset):
             filling_indices = np.random.randint(len(img_list), size=missing)
             for index in filling_indices:
                 img_list.append(img_list[index])
-        return annotation, img_list, label
+        if self.split_label:
+            label = annotation["LABEL"]
+            annotation = annotation.drop("LABEL")
+            return annotation, img_list, label
+        return annotation, img_list
