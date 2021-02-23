@@ -1,17 +1,21 @@
 import os
-from os import path
 import pandas as pd
+import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 
 
 class LymphocytosisDataset(Dataset):
+    # nb_img_fill represents the a common maximum for
+    nb_img_fill = 200
+
     def __init__(
         self,
         annotation_csv: str,
         root_dir: str,
         train: bool = True,
         transform: callable = None,
+        fill_img_list: bool = False,
     ) -> None:
         """
         Loads Lymphocytosis data
@@ -52,6 +56,7 @@ class LymphocytosisDataset(Dataset):
         self.root_dir = root_dir
         self.train = train
         self.transform = transform
+        self.fill_img_list = fill_img_list
 
     def __len__(self) -> int:
         if self.train:
@@ -70,5 +75,9 @@ class LymphocytosisDataset(Dataset):
             Image.open(os.path.join(img_dir, img_name))
             for img_name in os.listdir(img_dir)
         ]
-        label = self.labels.loc[id]
+        if self.fill_img_list:
+            missing = self.nb_img_fill - len(img_list)
+            filling_indices = np.random.randint(len(img_list), size=missing)
+            for index in filling_indices:
+                img_list.append(img_list[index])
         return annotation, img_list, label
