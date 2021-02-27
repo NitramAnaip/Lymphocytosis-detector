@@ -14,6 +14,8 @@ class LymphocytosisDataset(Dataset):
         annotation_csv: str,
         root_dir: str,
         train: bool = True,
+        valid: bool = False, #If we want the validation set. train must be set at True to get valiation set
+        train_split: float, # percentage we want in train (as opposed to valdation)
         transform: callable = None,
         fill_img_list: bool = False,
         split_label: bool = False,
@@ -34,10 +36,16 @@ class LymphocytosisDataset(Dataset):
         """
         ## Get the clinical annotation
         self.annotation_frame = pd.read_csv(annotation_csv, index_col=0)
-        ## Identify training and testing ids
+        ## Identify training, validation, and testing ids
         self.train_ids = list(
             self.annotation_frame["ID"][self.annotation_frame["LABEL"] != -1]
         )
+
+        if valid:
+            self.train_ids = self.train_ids[:int(len(self.train_ids) * train_split)]
+            self.valid_ids = self.train_ids[int(len(self.train_ids) * train_split):]
+
+
         self.test_ids = list(
             self.annotation_frame["ID"][self.annotation_frame["LABEL"] == -1]
         )
@@ -53,19 +61,26 @@ class LymphocytosisDataset(Dataset):
         ## Define instance attributes
         self.root_dir = root_dir
         self.train = train
+        self.valid = valid
         self.transform = transform
         self.fill_img_list = fill_img_list
         self.split_label = split_label
 
     def __len__(self) -> int:
         if self.train:
-            return len(self.train_ids)
+            if self.valid:
+                return int( len(self.train_ids) * (1-self.train_split) )
+            else:
+                return int(len(self.train_ids) * self.train_split)
         else:
             return len(self.test_ids)
 
     def __getitem__(self, index: int) -> tuple:
         if self.train:
-            id = self.train_ids[index]
+            if self.valid:
+                id = self.valid_ids[index]
+            else:
+                id = self.train_ids[index]
         else:
             id = self.test_ids[index]
         annotation = self.annotation_frame.loc[id]
