@@ -1,6 +1,6 @@
 import os
 import torch
-import cv2
+import torchvision.transforms as transforms
 import pandas as pd
 import numpy as np
 from PIL import Image
@@ -16,12 +16,13 @@ class LymphocytosisDataset(Dataset):
         annotation_csv: str = "/data/clinical_annotation.csv",
         root_dir: str = "/data",
         train: bool = True,
-        valid: bool = False, #If we want the validation set. train must be set at True to get valiation set
-        train_split: float = 0.8, # percentage we want in train (as opposed to valdation)
-        transform: callable = None,
+        valid: bool = False,  # If we want the validation set. train must be set at True to get valiation set
+        train_split: float = 0.8,  # percentage we want in train (as opposed to valdation)
+        transform: callable = transforms.ToTensor(),
         fill_img_list: bool = False,
-        split_label: bool = False
-        ) -> None:
+        split_label: bool = False,
+        convert_age: bool = True,
+    ) -> None:
         """
         Loads Lymphocytosis data
 
@@ -44,9 +45,8 @@ class LymphocytosisDataset(Dataset):
         )
 
         if valid:
-            self.train_ids = self.train_ids[:int(len(self.train_ids) * train_split)]
-            self.valid_ids = self.train_ids[int(len(self.train_ids) * train_split):]
-
+            self.train_ids = self.train_ids[: int(len(self.train_ids) * train_split)]
+            self.valid_ids = self.train_ids[int(len(self.train_ids) * train_split) :]
 
         self.test_ids = list(
             self.annotation_frame["ID"][self.annotation_frame["LABEL"] == -1]
@@ -67,6 +67,7 @@ class LymphocytosisDataset(Dataset):
         self.transform = transform
         self.fill_img_list = fill_img_list
         self.split_label = split_label
+        self.convert_age = convert_age
 
     def __len__(self) -> int:
         if self.train:
@@ -86,9 +87,15 @@ class LymphocytosisDataset(Dataset):
         else:
             id = self.test_ids[index]
         annotation = self.annotation_frame.loc[id]
+        if self.convert_age:
+            annotation["AGE"] = (
+                pd.to_datetime("01-01-2021") - annotation["DOB"]
+            ).days / 365.25
+            annotation = annotation.drop("DOB")
+        annotation = annotation.to_dict()
         img_dir = f"{self.root_dir}/{'train' if self.train else 'test'}set/{id}/"
         img_list = [
-            cv2.imread(os.path.join(img_dir, img_name))
+            Image.open(os.path.join(img_dir, img_name))
             for img_name in os.listdir(img_dir)
         ]
         if self.fill_img_list:
@@ -96,10 +103,13 @@ class LymphocytosisDataset(Dataset):
             filling_indices = np.random.randint(len(img_list), size=missing)
             for i in filling_indices:
                 img_list.append(img_list[i])
+        if self.transform is not None:
+            img_list = [self.transform(img) for img in img_list]
+            img_list = torch.stack(img_list)
         if self.split_label:
-            label = [0,0]
-            label[annotation["LABEL"]] = 1 
-            #label = annotation.drop("LABEL")
+            label = [0, 0]
+            label[annotation["LABEL"]] = 1
+            # label = annotation.drop("LABEL")
 
             return annotation, img_list, label
         return annotation, img_list
