@@ -73,21 +73,6 @@ def train():
     # nbr_batches = int(train_loader.__len__() / batch_size) + 1
     for i, (annotation, bag, targets) in enumerate(train_loader):
         #print("in batch {}".format(i))
-        # start = i * batch_size
-        # end = min((i + 1) * batch_size, train_loader.__len__())
-        # batch_indexes = [j for j in range(start, end)]
-        # batch = []
-        # targets = []
-        # for index in batch_indexes:
-        #     # print(index)
-        #     annotation, bag, target = train_loader[index]
-        #     # print(type(bag))
-        #     batch.append(bag)
-        #     targets.append(target)
-
-        # bag = torch.Tensor(bag)
-        # print(bag.shape)
-        # print(bag.permute(0,4,1,3,2).shape)
         bag = bag.permute(0, 2, 1, 3, 4)
         targets = torch.stack(targets).T
         #print(targets.shape)
@@ -102,8 +87,6 @@ def train():
       
 
         loss = torch.nn.functional.binary_cross_entropy(output, targets.float())
-        #output, targets = output.cpu().detach().numpy(), np.array(targets.float().cpu())
-        #accuracy += metrics.accuracy_score(targets, output)
  
         loss.backward()
         optimizer.step()
@@ -144,19 +127,21 @@ def validation():
 
 
 def main():
-    train_accuracy_list = []
-    val_accuracy_list = []
+    metrics = {"train":[ [], [], [], [] ], "valid":[ [], [], [], [] ]}
+    metric_names = ["accuracy", "recall", "precision", "f1"]
+
     for epoch in range(epochs):
         print("beginning of epoch {}".format(epoch))
         train_conf_matrix = train()
         val_conf_matrix = validation()
-        train_accuracy = get_metrics(train_conf_matrix)
-        val_accuracy = get_metrics(val_conf_matrix)
+        train_metrics = get_metrics(train_conf_matrix)
+        val_metrics = get_metrics(val_conf_matrix)
 
-        print("train accuracy: {}, val acc: {}".format(train_accuracy, val_accuracy))
+        print("train accuracy: {}, val acc: {}".format(train_metrics[0], val_metrics[0]))
 
-        train_accuracy_list.append(train_accuracy)
-        val_accuracy_list.append(val_accuracy)
+        for i in range (len(metrics["train"])):
+            metrics["train"][i].append(train_metrics[i])
+            metrics["valid"][i].append(val_metrics[i])
 
 
         print("end of epoch")
@@ -165,16 +150,18 @@ def main():
     
 
     if True:
-        fig, ax = plt.subplots(1,1,figsize=(20,10))
+        nbr_subplots = 4
+        fig, ax = plt.subplots(1,nbr_subplots,figsize=(20,10))
         #fig.suptitle("Train-Validation accuracy", fontsize=16)
     
 
-        ax.set_title("Train-Validation accuracy")
-        ax.plot(train_accuracy_list, label='train')
-        ax.plot(val_accuracy_list, label='validation')
-        ax.set_xlabel('num_epochs', fontsize=12)
-        ax.set_ylabel('accuracy', fontsize=12)
-        ax.legend(loc='best')
+        for i in range (nbr_subplots):
+            ax[i].set_title("Train-Validation {}".format(metric_names[i]))
+            ax[i].plot(metrics["train"][i], label='train')
+            ax[i].plot(metrics["valid"][i], label='validation')
+            ax[i].set_xlabel('num_epochs', fontsize=12)
+            ax[i].set_ylabel(metric_names[i], fontsize=12)
+            ax[i].legend(loc='best')
 
 
       
@@ -186,9 +173,12 @@ def main():
     return 0
 
 def get_metrics(conf_matrix):
-    trues = conf_matrix[0, 0] + conf_matrix[1,1]
-    false = conf_matrix[0,1] + conf_matrix[1,0]
-    accuracy = trues/(trues + false)
-    return accuracy
+    tn, fp, fn, tp = conf_matrix.ravel()
+
+    accuracy = (tp+tn)/(tp+tn+fp+fn)
+    recall = tp/(tp+fn)
+    precision = tp/(tp+fp)
+    f1 = (2*recall*precision)/(recall+precision)
+    return [accuracy, recall, precision, f1]
 
 main()
