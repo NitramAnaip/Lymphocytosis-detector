@@ -44,9 +44,9 @@ class LymphocytosisDataset(Dataset):
             self.annotation_frame["ID"][self.annotation_frame["LABEL"] != -1]
         )
 
-        if valid:
-            self.train_ids = self.train_ids[: int(len(self.train_ids) * train_split)]
-            self.valid_ids = self.train_ids[int(len(self.train_ids) * train_split) :]
+        
+        self.valid_ids = self.train_ids[int(len(self.train_ids) * train_split) :]
+        self.train_ids = self.train_ids[: int(len(self.train_ids) * train_split)]
 
         self.test_ids = list(
             self.annotation_frame["ID"][self.annotation_frame["LABEL"] == -1]
@@ -107,8 +107,9 @@ class LymphocytosisDataset(Dataset):
             img_list = [self.transform(img) for img in img_list]
             img_list = torch.stack(img_list)
         if self.split_label:
-            label = [0, 0]
-            label[annotation["LABEL"]] = 1
+            #label = [0, 0]
+            #label[annotation["LABEL"]] = 1
+            label = [annotation["LABEL"]]
             # label = annotation.drop("LABEL")
 
             return annotation, img_list, label
