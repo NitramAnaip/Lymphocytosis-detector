@@ -22,6 +22,7 @@ class LymphocytosisDataset(Dataset):
         fill_img_list: bool = False,
         split_label: bool = False,
         convert_age: bool = True,
+        convert_gender: bool = True,
     ) -> None:
         """
         Loads Lymphocytosis data
@@ -44,7 +45,6 @@ class LymphocytosisDataset(Dataset):
             self.annotation_frame["ID"][self.annotation_frame["LABEL"] != -1]
         )
 
-        
         self.valid_ids = self.train_ids[int(len(self.train_ids) * train_split) :]
         self.train_ids = self.train_ids[: int(len(self.train_ids) * train_split)]
 
@@ -92,6 +92,8 @@ class LymphocytosisDataset(Dataset):
                 pd.to_datetime("01-01-2021") - annotation["DOB"]
             ).days / 365.25
             annotation = annotation.drop("DOB")
+        if self.convert_age:
+            annotation["GENDER"] = 1 if annotation["GENDER"] == "M" else 0
         annotation = annotation.to_dict()
         img_dir = f"{self.root_dir}/{'train' if self.train else 'test'}set/{id}/"
         img_list = [
@@ -107,10 +109,10 @@ class LymphocytosisDataset(Dataset):
             img_list = [self.transform(img) for img in img_list]
             img_list = torch.stack(img_list)
         if self.split_label:
-            #label = [0, 0]
-            #label[annotation["LABEL"]] = 1
+            # label = [0, 0]
+            # label[annotation["LABEL"]] = 1
             label = [annotation["LABEL"]]
-            # label = annotation.drop("LABEL")
+            annotation.pop("LABEL")
 
             return annotation, img_list, label
         return annotation, img_list
