@@ -1,26 +1,55 @@
+import argparse
 import numpy as np
+from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-from models import CNNModel
+from models import CNNModel, TransferUNet, Attention
 from sklearn import metrics
 from dataloader import LymphocytosisDataset
 
 
-batch_size = 4
-epochs = 1
-model = CNNModel()
 
-train_split = 0.8  # percentage of the data we want in train (as opposed to valdation)
+
+
+
+
+# Training settings
+parser = argparse.ArgumentParser(description='Training script')
+parser.add_argument('--batch-size', type=int, default=4, metavar='B',
+                    help='input batch size for training (default: 4)')
+parser.add_argument('--epochs', type=int, default=10, metavar='N',
+                    help='number of epochs to train (default: 10)')
+parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
+                    help='learning rate (default: 0.01)')
+parser.add_argument('--momentum', type=float, default=0.01, metavar='M',
+                    help='SGD momentum (default: 0.5)')
+parser.add_argument('--seed', type=int, default=1, metavar='S',
+                    help='random seed (default: 1)')
+parser.add_argument('--train-split', type=str, default=0.8, metavar='E',
+                    help='percentage of data to use as train.')
+args = parser.parse_args()
+use_cuda = torch.cuda.is_available()
+torch.manual_seed(args.seed)
+
+
+
+batch_size = args.batch_size
+epochs = args.epochs
+model = Attention()
+train_split = args.train_split  # percentage of the data we want in train (as opposed to valdation)
+
+
 
 
 transform_train = transforms.Compose(
     [
         # transforms.RandomCrop(32, padding=4),
-        # transforms.RandomHorizontalFlip(),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
         transforms.ToTensor(),  # Convert Pillow Image to Tensor
-        # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
+        # transforms.Resize(128)
     ]
 )
 
@@ -46,7 +75,7 @@ val_dataset = LymphocytosisDataset(
     train=True,
     valid=True,
     train_split=train_split,
-    transform=transform_train,
+    #transform=transform_train, no need for transformation on validation set
     fill_img_list=True,
     split_label=True,
     convert_age=True,
@@ -65,26 +94,26 @@ if use_cuda:
 else:
     print("Not using CPU")
 
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.0001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.0001)
 
 
-def train():
+def train(permute=True):
     model.train()
 
     conf_matrix = np.zeros((2, 2))
-    # nbr_batches = int(train_loader.__len__() / batch_size) + 1
-    for i, (annotation, bag, targets) in enumerate(train_loader):
+    for i, (annotation, bag, targets) in enumerate(tqdm(train_loader)):
         # print("in batch {}".format(i))
-        bag = bag.permute(0, 2, 1, 3, 4)
+        if permute:
+            bag = bag.permute(0, 2, 1, 3, 4)
         targets = torch.stack(targets).T
-        # print(targets.shape)
         if use_cuda:
             bag, targets = bag.cuda(), targets.cuda()
+            for key, value in annotation.items():
+                annotation[key] = value.cuda()
 
         optimizer.zero_grad()
         output = model(bag, annotation)
 
-        # pred = output.data.max(1, keepdim=True, dtype = np.float32)[1]
 
         loss = torch.nn.functional.binary_cross_entropy(output, targets.float())
 
@@ -97,20 +126,22 @@ def train():
     return conf_matrix
 
 
-def validation():
+def validation(permute=True):
     model.eval()
 
     conf_matrix = np.zeros((2, 2))
     for i, (annotation, bag, targets) in enumerate(val_loader):
 
-        bag = bag.permute(0, 2, 1, 3, 4)
+        if permute:
+            bag = bag.permute(0, 2, 1, 3, 4)
         targets = torch.stack(targets).T
-        print(targets.shape)
         if use_cuda:
             bag, targets = bag.cuda(), targets.cuda()
+            for key, value in annotation.items():
+                annotation[key] = value.cuda()
 
         optimizer.zero_grad()
-        output = model(bag)
+        output = model(bag, annotation)
 
         loss = torch.nn.functional.binary_cross_entropy(output, targets.float())
         output = output.detach().cpu().numpy()
@@ -125,8 +156,8 @@ def main():
 
     for epoch in range(epochs):
         print("beginning of epoch {}".format(epoch))
-        train_conf_matrix = train()
-        val_conf_matrix = validation()
+        train_conf_matrix = train(permute=True)
+        val_conf_matrix = validation(permute=True)
         train_metrics = get_metrics(train_conf_matrix)
         val_metrics = get_metrics(val_conf_matrix)
 
@@ -153,8 +184,8 @@ def main():
             ax[i].set_ylabel(metric_names[i], fontsize=12)
             ax[i].legend(loc="best")
 
-        plt.savefig("./results/plots/accuracy.png")
-        print("Plot saved to " + "./results/plots/accuracy.png")
+        plt.savefig("./results/plots/Attention.png")
+        print("Plot saved to " + "./results/plots/Attention.png")
     return 0
 
 
